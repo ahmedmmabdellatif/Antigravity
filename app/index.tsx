@@ -17,25 +17,33 @@ import * as DocumentPicker from "expo-document-picker";
 import { LinearGradient } from "expo-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FileText, Upload, AlertCircle, CheckCircle, Trash2, Eye, ExternalLink, Circle, CheckCircle2, ChevronDown, ChevronUp, Play, History as HistoryIcon, Clock, ChevronLeft, MoreVertical, TrendingUp, RefreshCw, Plus, Minus, Home, Dumbbell, User, Receipt, Menu, X, Activity, Heart, Zap, Utensils, Droplet, Pill, Target, AlertTriangle } from "lucide-react-native";
-import { FitnessPlan, Workout, CardioSession, DailyMealPlan, WaterIntake, Supplement, RehabMobility, Stretching, ProgressTracking, ProfileGoals, RuleWarning } from "../constants/fitnessTypes";
+import {
+  FitnessPlanFields,
+  Workout,
+  CardioSession,
+  Meal,
+  WaterIntake,
+  Supplement,
+  RehabMobility,
+  Stretching,
+  Warmup,
+  WeeklyScheduleDay,
+  EducationSection,
+  FoodSource,
+  Assessment,
+  MonitoringAndTracking,
+  BehaviorAndPsychology,
+  AdaptationAndPeriodization,
+  CommunicationAndSupport,
+  OtherSection,
+  Debug,
+  UniversalEnvelope,
+  Domain,
+  GenericDocumentFields
+} from "../constants/fitnessTypes";
 
 const STORAGE_KEY_PREFIX = "pdf_parser:document:";
 const WORKER_URL = "https://pdf-relay.ahmed-m-m-abdellatif.workers.dev/";
-
-type Domain = {
-  type: string;
-  confidence: number;
-  fields: Record<string, unknown>;
-  missing_fields: string[];
-  source_coverage: {
-    pages_covered: number[];
-    pages_with_no_mapped_content: number[];
-  };
-};
-
-type UniversalEnvelope = {
-  domains: Domain[];
-};
 
 type ParsedResult = {
   data: UniversalEnvelope;
@@ -72,7 +80,7 @@ type StaticDomain = {
   icon: string;
 };
 
-type FitnessSection = "overview" | "profile" | "workouts" | "cardio" | "mobility" | "stretching" | "nutrition" | "water" | "supplements" | "progress" | "rules";
+type FitnessSection = "overview" | "profile" | "workouts" | "warmup" | "cardio" | "mobility" | "stretching" | "schedule" | "nutrition" | "water" | "supplements" | "assessment" | "education" | "debug" | "progress" | "rules";
 
 type FitnessSectionConfig = {
   id: FitnessSection;
@@ -100,12 +108,17 @@ const FITNESS_SECTIONS: FitnessSectionConfig[] = [
   { id: "overview", label: "Overview", icon: "eye" },
   { id: "profile", label: "Profile", icon: "user" },
   { id: "workouts", label: "Workouts", icon: "dumbbell" },
+  { id: "warmup", label: "Warmup", icon: "zap" },
   { id: "cardio", label: "Cardio", icon: "activity" },
-  { id: "mobility", label: "Mobility & Rehab", icon: "zap" },
-  { id: "stretching", label: "Stretching", icon: "heart" },
+  { id: "mobility", label: "Mobility & Rehab", icon: "heart" },
+  { id: "stretching", label: "Stretching", icon: "target" },
+  { id: "schedule", label: "Weekly Schedule", icon: "target" },
   { id: "nutrition", label: "Nutrition", icon: "utensils" },
   { id: "water", label: "Water", icon: "droplet" },
   { id: "supplements", label: "Supplements", icon: "pill" },
+  { id: "assessment", label: "Assessment", icon: "user" },
+  { id: "education", label: "Education", icon: "eye" },
+  { id: "debug", label: "Debug", icon: "alert" },
   { id: "progress", label: "Progress", icon: "target" },
   { id: "rules", label: "Rules", icon: "alert" },
 ];
@@ -647,6 +660,29 @@ export default function HomeScreen() {
             <Text style={styles.title}>PDF Parser</Text>
             <Text style={styles.subtitle}>
               Upload a PDF to extract structured data via OpenAI
+            </Text>
+          </View>
+
+          {/* Version / Changelog Note */}
+          <View style={styles.versionBox}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+              <CheckCircle color="#4ADE80" size={16} />
+              <Text style={styles.versionTitle}>  Latest Update</Text>
+            </View>
+            <Text style={styles.versionText}>
+              ✨ New worker schema deployed - {new Date().toLocaleDateString()}
+            </Text>
+            <Text style={styles.versionText}>
+              • Enhanced fitness plan parsing with per-week cardio progression
+            </Text>
+            <Text style={styles.versionText}>
+              • Added warmup protocols, weekly schedule, and education sections
+            </Text>
+            <Text style={styles.versionText}>
+              • New assessment & monitoring data support
+            </Text>
+            <Text style={styles.versionText}>
+              • Developer debug view for page summaries
             </Text>
           </View>
 
@@ -1274,133 +1310,27 @@ export default function HomeScreen() {
     }
   };
 
-  const extractFitnessData = (): FitnessPlan | null => {
+  const extractFitnessData = (): FitnessPlanFields | null => {
     let fitnessDomain: Domain | undefined;
-    
+
     if (selectedDocument) {
       fitnessDomain = selectedDocument.data.domains?.find(d => d.type === "fitness_plan");
     }
-    
+
     if (!fitnessDomain && allDocuments.length > 0) {
       for (const doc of allDocuments) {
         fitnessDomain = doc.data.domains?.find(d => d.type === "fitness_plan");
         if (fitnessDomain) break;
       }
     }
-    
+
     if (!fitnessDomain) return null;
-    
-    const fields = fitnessDomain.fields;
-    const meta = (fields.meta as any) || {};
-    const profile = (fields.profile as any) || {};
-    const goals = (fields.goals as any) || {};
-    const schedule = (fields.schedule as any) || {};
-    const nutrition = (fields.nutrition as any) || {};
-    const cardio = (fields.cardio as any) || {};
-    const mobilityRehab = (fields.mobility_rehab as any) || {};
-    const stretching = (fields.stretching as any) || {};
-    const water = (fields.water as any) || {};
-    const supplements = (fields.supplements as any) || {};
-    const progress = (fields.progress as any) || {};
-    const rules = (fields.rules as any) || {};
-    
-    const fitnessPlan: FitnessPlan = {
-      meta: {
-        plan_name: meta.plan_name || "Fitness Plan",
-        coach_name: meta.coach_name || null,
-        duration_weeks: meta.duration_weeks || null,
-        level: meta.target_level || null,
-        days_per_week: schedule.days_per_week || null,
-        split: Array.isArray(schedule.weekly_split) ? schedule.weekly_split.join(", ") : null,
-        equipment: null,
-      },
-      profile_goals: {
-        age: profile.age || null,
-        height: profile.height_cm ? `${profile.height_cm} cm` : null,
-        current_weight: profile.weight_kg ? `${profile.weight_kg} kg` : null,
-        current_body_fat: profile.body_fat_percent ? `${profile.body_fat_percent}%` : null,
-        target_weight: null,
-        target_body_fat: null,
-        primary_goal: goals.primary || null,
-        secondary_goals: Array.isArray(goals.secondary) ? goals.secondary : [],
-        timeline: meta.duration_weeks ? `${meta.duration_weeks} weeks` : null,
-        injuries: Array.isArray(profile.injuries) && profile.injuries.length > 0 ? profile.injuries.join(", ") : "None",
-        constraints: Array.isArray(profile.constraints) && profile.constraints.length > 0 ? profile.constraints.join(", ") : "None",
-      },
-      workouts: Array.isArray(fields.workouts) ? (fields.workouts as any[]).map((w: any) => ({
-        name: w.name || "Workout",
-        day_label: w.label || null,
-        exercises: Array.isArray(w.exercises) ? (w.exercises as any[]).map((e: any) => ({
-          name: e.name || "Exercise",
-          sets: e.sets || null,
-          reps: e.reps || null,
-          rest_seconds: e.rest_seconds || null,
-          tempo: e.tempo || null,
-          notes: e.notes || null,
-          media_url: Array.isArray(e.media) && e.media.length > 0 && e.media[0].type === "video" ? e.media[0].url : null,
-          source_pages: Array.isArray(e.pages) ? e.pages : [],
-        })) : [],
-        source_pages: Array.isArray(w.pages) ? w.pages : [],
-      })) : [],
-      cardio: Array.isArray(cardio.sessions) ? (cardio.sessions as any[]).map((s: any) => ({
-        type: s.type || "Cardio",
-        duration_minutes: s.duration_minutes || null,
-        intensity: s.intensity || null,
-        frequency: s.frequency || null,
-        protocol: s.protocol || null,
-        notes: s.notes || null,
-      })) : [],
-      rehab_mobility: Array.isArray(mobilityRehab.routines) ? (mobilityRehab.routines as any[]).map((r: any) => ({
-        category: r.category || "Mobility",
-        exercises: Array.isArray(r.exercises) ? r.exercises : [],
-      })) : [],
-      stretching: {
-        post_workout: Array.isArray(stretching.post_workout) ? stretching.post_workout : [],
-        evening_routine: Array.isArray(stretching.evening_routine) ? stretching.evening_routine : [],
-        pre_workout: Array.isArray(stretching.pre_workout) ? stretching.pre_workout : [],
-      },
-      meals: Array.isArray(nutrition.meals) ? (nutrition.meals as any[]).map((m: any) => ({
-        day: m.day || "Day",
-        meals: Array.isArray(m.meals) ? (m.meals as any[]).map((meal: any) => ({
-          name: meal.name || "Meal",
-          time: meal.time || null,
-          foods: Array.isArray(meal.foods) ? meal.foods : [],
-          macros: meal.macros || null,
-        })) : [],
-        daily_totals: m.daily_totals || null,
-      })) : [],
-      water_intake: {
-        daily_goal_liters: water.target_liters_per_day || null,
-        notes: Array.isArray(water.notes) && water.notes.length > 0 ? water.notes.join(". ") : null,
-      },
-      supplements: Array.isArray(supplements.items) ? (supplements.items as any[]).map((s: any) => ({
-        name: s.name || "Supplement",
-        dosage: s.dosage || "As directed",
-        timing: s.timing || null,
-        notes: s.notes || null,
-      })) : [],
-      progress_tracking: {
-        check_in_frequency: progress.check_in_frequency || null,
-        weekly_measurements: Array.isArray(progress.weekly_measurements) ? progress.weekly_measurements : [],
-        monthly_assessments: Array.isArray(progress.monthly_assessments) ? progress.monthly_assessments : [],
-        required_photos: Array.isArray(progress.required_photos) ? progress.required_photos : [],
-      },
-      rules_warnings: [
-        ...(
-          Array.isArray(rules.general) 
-            ? rules.general.map((r: string) => ({ type: "rule" as const, text: r }))
-            : []
-        ),
-        ...(
-          Array.isArray(rules.warnings)
-            ? rules.warnings.map((w: string) => ({ type: "warning" as const, text: w }))
-            : []
-        ),
-      ],
-    };
-    
-    console.log("[extractFitnessData] Extracted fitness plan from worker JSON:", fitnessPlan);
-    return fitnessPlan;
+
+    // The new worker returns fields directly in the correct format
+    const fields = fitnessDomain.fields as FitnessPlanFields;
+
+    console.log("[extractFitnessData] Extracted fitness plan from worker JSON:", fields);
+    return fields;
   };
 
   const renderFitnessSectionContent = () => {
@@ -1418,50 +1348,45 @@ export default function HomeScreen() {
     
     switch (fitnessSection) {
       case "overview":
+        const meta = data.meta || {};
         return (
           <View style={styles.sectionContent}>
             <Text style={styles.sectionHeader}>Plan Overview</Text>
             <View style={styles.overviewCard}>
-              {data.meta.plan_name && (
+              {meta.plan_name && (
                 <View style={styles.overviewRow}>
                   <Text style={styles.overviewLabel}>Plan Name:</Text>
-                  <Text style={styles.overviewValue}>{data.meta.plan_name}</Text>
+                  <Text style={styles.overviewValue}>{meta.plan_name}</Text>
                 </View>
               )}
-              {data.meta.coach_name && (
+              {meta.coach_name && (
                 <View style={styles.overviewRow}>
                   <Text style={styles.overviewLabel}>Coach:</Text>
-                  <Text style={styles.overviewValue}>{data.meta.coach_name}</Text>
+                  <Text style={styles.overviewValue}>{meta.coach_name}</Text>
                 </View>
               )}
-              {data.meta.level && (
+              {meta.target_level && (
                 <View style={styles.overviewRow}>
                   <Text style={styles.overviewLabel}>Level:</Text>
-                  <Text style={styles.overviewValue}>{data.meta.level}</Text>
+                  <Text style={styles.overviewValue}>{meta.target_level}</Text>
                 </View>
               )}
-              {data.meta.duration_weeks && (
+              {meta.duration_weeks && (
                 <View style={styles.overviewRow}>
                   <Text style={styles.overviewLabel}>Duration:</Text>
-                  <Text style={styles.overviewValue}>{data.meta.duration_weeks} weeks</Text>
+                  <Text style={styles.overviewValue}>{meta.duration_weeks} weeks</Text>
                 </View>
               )}
-              {data.meta.days_per_week && (
+              {meta.language && (
                 <View style={styles.overviewRow}>
-                  <Text style={styles.overviewLabel}>Days per Week:</Text>
-                  <Text style={styles.overviewValue}>{data.meta.days_per_week}</Text>
+                  <Text style={styles.overviewLabel}>Language:</Text>
+                  <Text style={styles.overviewValue}>{meta.language}</Text>
                 </View>
               )}
-              {data.meta.split && (
+              {meta.target_gender && (
                 <View style={styles.overviewRow}>
-                  <Text style={styles.overviewLabel}>Split:</Text>
-                  <Text style={styles.overviewValue}>{data.meta.split}</Text>
-                </View>
-              )}
-              {data.meta.equipment && (
-                <View style={styles.overviewRow}>
-                  <Text style={styles.overviewLabel}>Equipment:</Text>
-                  <Text style={styles.overviewValue}>{data.meta.equipment}</Text>
+                  <Text style={styles.overviewLabel}>Target:</Text>
+                  <Text style={styles.overviewValue}>{meta.target_gender}</Text>
                 </View>
               )}
             </View>
@@ -1469,14 +1394,16 @@ export default function HomeScreen() {
         );
 
       case "profile":
-        const profile = data.profile_goals;
-        const hasAnyProfileData = profile && (
-          profile.age || profile.height || profile.current_weight || profile.current_body_fat ||
-          profile.target_weight || profile.target_body_fat || profile.primary_goal ||
-          (profile.secondary_goals && profile.secondary_goals.length > 0) ||
-          profile.timeline || profile.injuries || profile.constraints
+        const profile = data.profile || {};
+        const goals = data.goals || {};
+        const hasAnyProfileData = (
+          profile.age || profile.height_cm || profile.weight_kg || profile.body_fat_percent ||
+          (profile.injuries && profile.injuries.length > 0) ||
+          (profile.constraints && profile.constraints.length > 0) ||
+          goals.primary || (goals.secondary && goals.secondary.length > 0) ||
+          goals.timeframe_weeks
         );
-        
+
         if (!hasAnyProfileData) {
           return (
             <View style={styles.sectionContent}>
@@ -1484,7 +1411,7 @@ export default function HomeScreen() {
             </View>
           );
         }
-        
+
         return (
           <View style={styles.sectionContent}>
             <Text style={styles.sectionHeader}>Profile & Goals</Text>
@@ -1495,64 +1422,52 @@ export default function HomeScreen() {
                   <Text style={styles.overviewValue}>{profile.age}</Text>
                 </View>
               )}
-              {profile.height && (
+              {profile.height_cm && (
                 <View style={styles.overviewRow}>
                   <Text style={styles.overviewLabel}>Height:</Text>
-                  <Text style={styles.overviewValue}>{profile.height}</Text>
+                  <Text style={styles.overviewValue}>{profile.height_cm} cm</Text>
                 </View>
               )}
-              {profile.current_weight && (
+              {profile.weight_kg && (
                 <View style={styles.overviewRow}>
-                  <Text style={styles.overviewLabel}>Current Weight:</Text>
-                  <Text style={styles.overviewValue}>{profile.current_weight}</Text>
+                  <Text style={styles.overviewLabel}>Weight:</Text>
+                  <Text style={styles.overviewValue}>{profile.weight_kg} kg</Text>
                 </View>
               )}
-              {profile.current_body_fat && (
+              {profile.body_fat_percent && (
                 <View style={styles.overviewRow}>
                   <Text style={styles.overviewLabel}>Body Fat:</Text>
-                  <Text style={styles.overviewValue}>{profile.current_body_fat}</Text>
+                  <Text style={styles.overviewValue}>{profile.body_fat_percent}%</Text>
                 </View>
               )}
-              {profile.target_weight && (
-                <View style={styles.overviewRow}>
-                  <Text style={styles.overviewLabel}>Target Weight:</Text>
-                  <Text style={styles.overviewValue}>{profile.target_weight}</Text>
-                </View>
-              )}
-              {profile.target_body_fat && (
-                <View style={styles.overviewRow}>
-                  <Text style={styles.overviewLabel}>Target Body Fat:</Text>
-                  <Text style={styles.overviewValue}>{profile.target_body_fat}</Text>
-                </View>
-              )}
-              {profile.primary_goal && (
+              {goals.primary && (
                 <View style={styles.overviewRow}>
                   <Text style={styles.overviewLabel}>Primary Goal:</Text>
-                  <Text style={styles.overviewValue}>{profile.primary_goal}</Text>
+                  <Text style={styles.overviewValue}>{goals.primary}</Text>
                 </View>
               )}
-              {profile.secondary_goals && profile.secondary_goals.length > 0 && (
+              {goals.secondary && goals.secondary.length > 0 && (
                 <View style={styles.overviewRow}>
                   <Text style={styles.overviewLabel}>Secondary Goals:</Text>
-                  <Text style={styles.overviewValue}>{profile.secondary_goals.join(", ")}</Text>
+                  <Text style={styles.overviewValue}>{goals.secondary.join(", ")}</Text>
                 </View>
               )}
-              {profile.timeline && (
+              {goals.timeframe_weeks && (
                 <View style={styles.overviewRow}>
                   <Text style={styles.overviewLabel}>Timeline:</Text>
-                  <Text style={styles.overviewValue}>{profile.timeline}</Text>
+                  <Text style={styles.overviewValue}>{goals.timeframe_weeks} weeks</Text>
                 </View>
               )}
-              {profile.injuries && (
+              {profile.injuries && profile.injuries.length > 0 && (
                 <View style={styles.overviewRow}>
                   <Text style={styles.overviewLabel}>Injuries:</Text>
-                  <Text style={styles.overviewValue}>{profile.injuries}</Text>
+                  <Text style={styles.overviewValue}>{profile.injuries.join(", ")}</Text>
                 </View>
               )}
-              {profile.constraints && (
+              {profile.constraints && profile.constraints.length > 0 && (
                 <View style={styles.overviewRow}>
                   <Text style={styles.overviewLabel}>Constraints:</Text>
-                  <Text style={styles.overviewValue}>{profile.constraints}</Text>
+                  <Text style={styles.overviewValue}>{profile.constraints.join(", ")}</Text>
                 </View>
               )}
             </View>
@@ -1567,7 +1482,7 @@ export default function HomeScreen() {
             </View>
           );
         }
-        
+
         return (
           <View style={styles.sectionContent}>
             <TouchableOpacity
@@ -1578,13 +1493,16 @@ export default function HomeScreen() {
               <Dumbbell color="#3DD0D0" size={20} />
               <Text style={styles.viewProgramButtonText}>Open Training Program</Text>
             </TouchableOpacity>
-            
+
             <Text style={styles.sectionHeader}>Workouts Summary</Text>
             {data.workouts.map((workout: any, idx: number) => (
               <View key={idx} style={styles.summaryCard}>
                 <Text style={styles.summaryCardTitle}>{workout.name || `Workout ${idx + 1}`}</Text>
                 {workout.day_label && (
                   <Text style={styles.summaryCardMeta}>{workout.day_label}</Text>
+                )}
+                {workout.phase && (
+                  <Text style={styles.summaryCardMeta}>Phase: {workout.phase}</Text>
                 )}
                 <Text style={styles.summaryCardMeta}>
                   {workout.exercises?.length || 0} exercises
@@ -1601,19 +1519,37 @@ export default function HomeScreen() {
             {data.cardio && data.cardio.length > 0 ? (
               data.cardio.map((session: any, idx: number) => (
                 <View key={idx} style={styles.summaryCard}>
-                  <Text style={styles.summaryCardTitle}>{session.type}</Text>
+                  <Text style={styles.summaryCardTitle}>{session.name || `Cardio ${idx + 1}`}</Text>
                   {session.duration_minutes && (
                     <Text style={styles.summaryCardMeta}>Duration: {session.duration_minutes} min</Text>
                   )}
                   {session.intensity && (
                     <Text style={styles.summaryCardMeta}>Intensity: {session.intensity}</Text>
                   )}
-                  {session.frequency && (
-                    <Text style={styles.summaryCardMeta}>Frequency: {session.frequency}</Text>
+                  {session.frequency_per_week && (
+                    <Text style={styles.summaryCardMeta}>Frequency: {session.frequency_per_week}x per week</Text>
                   )}
-                  {session.protocol && (
-                    <Text style={styles.summaryCardMeta}>Protocol: {session.protocol}</Text>
+
+                  {/* Per-week plan progression - DO NOT SUMMARIZE */}
+                  {session.per_week_plan && session.per_week_plan.length > 0 && (
+                    <View style={{ marginTop: 12 }}>
+                      <Text style={styles.summaryCardTitle}>Weekly Progression:</Text>
+                      {session.per_week_plan.map((week: any, weekIdx: number) => (
+                        <View key={weekIdx} style={{ marginTop: 8, paddingLeft: 12, borderLeftWidth: 2, borderLeftColor: '#3DD0D0' }}>
+                          <Text style={styles.summaryCardMeta}>
+                            Week {week.week}
+                            {week.days_per_week ? ` • ${week.days_per_week}x/week` : ''}
+                            {week.duration_minutes ? ` • ${week.duration_minutes} min` : ''}
+                            {week.intensity ? ` • ${week.intensity}` : ''}
+                          </Text>
+                          {week.notes && (
+                            <Text style={styles.summaryCardNotes}>{week.notes}</Text>
+                          )}
+                        </View>
+                      ))}
+                    </View>
                   )}
+
                   {session.notes && (
                     <Text style={styles.summaryCardNotes}>{session.notes}</Text>
                   )}
@@ -1629,13 +1565,37 @@ export default function HomeScreen() {
         return (
           <View style={styles.sectionContent}>
             <Text style={styles.sectionHeader}>Mobility & Rehab</Text>
-            {data.rehab_mobility && data.rehab_mobility.length > 0 ? (
-              data.rehab_mobility.map((section: any, idx: number) => (
+            {data.rehab_and_mobility && data.rehab_and_mobility.length > 0 ? (
+              data.rehab_and_mobility.map((section: any, idx: number) => (
                 <View key={idx} style={styles.summaryCard}>
-                  <Text style={styles.summaryCardTitle}>{section.category}</Text>
-                  {section.exercises && section.exercises.map((ex: string, exIdx: number) => (
-                    <Text key={exIdx} style={styles.listItem}>• {ex}</Text>
+                  <Text style={styles.summaryCardTitle}>{section.name || `Rehab ${idx + 1}`}</Text>
+                  {section.target_area && (
+                    <Text style={styles.summaryCardMeta}>Target: {section.target_area}</Text>
+                  )}
+                  {section.frequency_per_week && (
+                    <Text style={styles.summaryCardMeta}>Frequency: {section.frequency_per_week}x per week</Text>
+                  )}
+
+                  {/* Structured exercises */}
+                  {section.exercises && section.exercises.length > 0 && section.exercises.map((ex: any, exIdx: number) => (
+                    <View key={exIdx} style={{ marginTop: 8, paddingLeft: 12, borderLeftWidth: 2, borderLeftColor: '#4ADE80' }}>
+                      <Text style={styles.listItem}>• {ex.name}</Text>
+                      {(ex.sets || ex.reps || ex.duration_seconds) && (
+                        <Text style={styles.summaryCardMeta}>
+                          {ex.sets ? `${ex.sets} sets` : ''}
+                          {ex.reps ? ` × ${ex.reps}` : ''}
+                          {ex.duration_seconds ? ` • ${ex.duration_seconds}s` : ''}
+                        </Text>
+                      )}
+                      {ex.notes && (
+                        <Text style={styles.summaryCardNotes}>{ex.notes}</Text>
+                      )}
+                    </View>
                   ))}
+
+                  {section.notes && (
+                    <Text style={styles.summaryCardNotes}>{section.notes}</Text>
+                  )}
                 </View>
               ))
             ) : (
@@ -1645,42 +1605,30 @@ export default function HomeScreen() {
         );
 
       case "stretching":
-        const hasStretchingData = data.stretching && (
-          (data.stretching.post_workout && data.stretching.post_workout.length > 0) ||
-          (data.stretching.evening_routine && data.stretching.evening_routine.length > 0) ||
-          (data.stretching.pre_workout && data.stretching.pre_workout.length > 0)
-        );
-        
         return (
           <View style={styles.sectionContent}>
             <Text style={styles.sectionHeader}>Stretching Routines</Text>
-            {hasStretchingData ? (
-              <>
-                {data.stretching.pre_workout && data.stretching.pre_workout.length > 0 && (
-                  <View style={styles.summaryCard}>
-                    <Text style={styles.summaryCardTitle}>Pre-Workout</Text>
-                    {data.stretching.pre_workout.map((stretch: string, idx: number) => (
-                      <Text key={idx} style={styles.listItem}>• {stretch}</Text>
-                    ))}
-                  </View>
-                )}
-                {data.stretching.post_workout && data.stretching.post_workout.length > 0 && (
-                  <View style={styles.summaryCard}>
-                    <Text style={styles.summaryCardTitle}>Post-Workout</Text>
-                    {data.stretching.post_workout.map((stretch: string, idx: number) => (
-                      <Text key={idx} style={styles.listItem}>• {stretch}</Text>
-                    ))}
-                  </View>
-                )}
-                {data.stretching.evening_routine && data.stretching.evening_routine.length > 0 && (
-                  <View style={styles.summaryCard}>
-                    <Text style={styles.summaryCardTitle}>Evening Routine</Text>
-                    {data.stretching.evening_routine.map((stretch: string, idx: number) => (
-                      <Text key={idx} style={styles.listItem}>• {stretch}</Text>
-                    ))}
-                  </View>
-                )}
-              </>
+            {data.stretching && data.stretching.length > 0 ? (
+              data.stretching.map((stretch: any, idx: number) => (
+                <View key={idx} style={styles.summaryCard}>
+                  <Text style={styles.summaryCardTitle}>{stretch.name || `Stretch ${idx + 1}`}</Text>
+                  {stretch.body_part && (
+                    <Text style={styles.summaryCardMeta}>Body Part: {stretch.body_part}</Text>
+                  )}
+                  {stretch.sets && (
+                    <Text style={styles.summaryCardMeta}>Sets: {stretch.sets}</Text>
+                  )}
+                  {stretch.duration_seconds && (
+                    <Text style={styles.summaryCardMeta}>Duration: {stretch.duration_seconds}s</Text>
+                  )}
+                  {stretch.frequency_per_week && (
+                    <Text style={styles.summaryCardMeta}>Frequency: {stretch.frequency_per_week}x per week</Text>
+                  )}
+                  {stretch.notes && (
+                    <Text style={styles.summaryCardNotes}>{stretch.notes}</Text>
+                  )}
+                </View>
+              ))
             ) : (
               <Text style={styles.emptyText}>No stretching routines in this PDF</Text>
             )}
@@ -1691,81 +1639,99 @@ export default function HomeScreen() {
         return (
           <View style={styles.sectionContent}>
             <Text style={styles.sectionHeader}>Nutrition Plan</Text>
+
+            {/* Meals */}
             {data.meals && data.meals.length > 0 ? (
-              data.meals.map((dayPlan: any, idx: number) => (
+              data.meals.map((meal: any, idx: number) => (
                 <View key={idx} style={styles.summaryCard}>
-                  <Text style={styles.summaryCardTitle}>{dayPlan.day || `Day ${idx + 1}`}</Text>
-                  {dayPlan.daily_totals && (
-                    <View style={styles.macrosRow}>
-                      {dayPlan.daily_totals.calories && (
-                        <View style={styles.macroItem}>
-                          <Text style={styles.macroValue}>{dayPlan.daily_totals.calories}</Text>
-                          <Text style={styles.macroLabel}>Calories</Text>
-                        </View>
-                      )}
-                      {dayPlan.daily_totals.protein && (
-                        <View style={styles.macroItem}>
-                          <Text style={styles.macroValue}>{dayPlan.daily_totals.protein}g</Text>
-                          <Text style={styles.macroLabel}>Protein</Text>
-                        </View>
-                      )}
-                      {dayPlan.daily_totals.carbs && (
-                        <View style={styles.macroItem}>
-                          <Text style={styles.macroValue}>{dayPlan.daily_totals.carbs}g</Text>
-                          <Text style={styles.macroLabel}>Carbs</Text>
-                        </View>
-                      )}
-                      {dayPlan.daily_totals.fat && (
-                        <View style={styles.macroItem}>
-                          <Text style={styles.macroValue}>{dayPlan.daily_totals.fat}g</Text>
-                          <Text style={styles.macroLabel}>Fat</Text>
-                        </View>
-                      )}
-                    </View>
+                  <View style={styles.mealHeader}>
+                    <Text style={styles.summaryCardTitle}>{meal.name || `Meal ${idx + 1}`}</Text>
+                    {meal.time && <Text style={styles.mealTime}>{meal.time}</Text>}
+                  </View>
+
+                  {meal.selection_rule && (
+                    <Text style={styles.summaryCardMeta}>📝 {meal.selection_rule}</Text>
                   )}
-                  {dayPlan.meals && dayPlan.meals.map((meal: any, mealIdx: number) => (
-                    <View key={mealIdx} style={styles.mealCard}>
-                      <View style={styles.mealHeader}>
-                        <Text style={styles.mealName}>{meal.name || `Meal ${mealIdx + 1}`}</Text>
-                        {meal.time && <Text style={styles.mealTime}>{meal.time}</Text>}
+
+                  {/* Group items by variant_label */}
+                  {meal.items && meal.items.length > 0 && (() => {
+                    const itemsByVariant: Record<string, any[]> = {};
+                    meal.items.forEach((item: any) => {
+                      const variant = item.variant_label || 'default';
+                      if (!itemsByVariant[variant]) itemsByVariant[variant] = [];
+                      itemsByVariant[variant].push(item);
+                    });
+
+                    return Object.keys(itemsByVariant).map((variant, varIdx) => (
+                      <View key={varIdx} style={{ marginTop: 8 }}>
+                        {variant !== 'default' && (
+                          <Text style={styles.summaryCardMeta}>• {variant}</Text>
+                        )}
+                        {itemsByVariant[variant].map((item: any, itemIdx: number) => (
+                          <View key={itemIdx} style={{ paddingLeft: variant !== 'default' ? 12 : 0 }}>
+                            <Text style={styles.foodItem}>
+                              {variant === 'default' ? '•' : '  ◦'} {item.name}
+                              {item.quantity ? ` (${item.quantity})` : ''}
+                            </Text>
+                            {(item.calories_kcal || item.protein_g || item.carbs_g || item.fats_g) && (
+                              <Text style={styles.summaryCardMeta}>
+                                {item.calories_kcal ? `${item.calories_kcal} cal` : ''}
+                                {item.protein_g ? ` • P: ${item.protein_g}g` : ''}
+                                {item.carbs_g ? ` • C: ${item.carbs_g}g` : ''}
+                                {item.fats_g ? ` • F: ${item.fats_g}g` : ''}
+                              </Text>
+                            )}
+                          </View>
+                        ))}
                       </View>
-                      {meal.foods && meal.foods.map((food: string, foodIdx: number) => (
-                        <Text key={foodIdx} style={styles.foodItem}>• {food}</Text>
-                      ))}
-                      {meal.macros && (
-                        <View style={styles.mealMacros}>
-                          <Text style={styles.mealMacroText}>
-                            {meal.macros.calories ? `${meal.macros.calories} cal` : ''}
-                            {meal.macros.protein ? ` • P: ${meal.macros.protein}g` : ''}
-                            {meal.macros.carbs ? ` • C: ${meal.macros.carbs}g` : ''}
-                            {meal.macros.fat ? ` • F: ${meal.macros.fat}g` : ''}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  ))}
+                    ));
+                  })()}
+
+                  {meal.notes && (
+                    <Text style={styles.summaryCardNotes}>{meal.notes}</Text>
+                  )}
                 </View>
               ))
             ) : (
-              <Text style={styles.emptyText}>No nutrition information in this PDF</Text>
+              <Text style={styles.emptyText}>No meals defined</Text>
+            )}
+
+            {/* Food Sources */}
+            {data.food_sources && data.food_sources.length > 0 && (
+              <View style={{ marginTop: 24 }}>
+                <Text style={styles.sectionHeader}>Food Sources</Text>
+                {data.food_sources.map((source: any, idx: number) => (
+                  <View key={idx} style={styles.summaryCard}>
+                    <Text style={styles.summaryCardTitle}>{source.macro}</Text>
+                    {source.items && source.items.map((item: any, itemIdx: number) => (
+                      <View key={itemIdx}>
+                        <Text style={styles.listItem}>• {item.name}</Text>
+                        {item.notes && (
+                          <Text style={styles.summaryCardNotes}>{item.notes}</Text>
+                        )}
+                      </View>
+                    ))}
+                  </View>
+                ))}
+              </View>
             )}
           </View>
         );
 
       case "water":
         const hasWaterData = data.water_intake && (
-          data.water_intake.daily_goal_liters || data.water_intake.notes
+          data.water_intake.recommended_liters_per_day || data.water_intake.notes
         );
-        
+
         return (
           <View style={styles.sectionContent}>
             <Text style={styles.sectionHeader}>Water Intake</Text>
             {hasWaterData ? (
               <View style={styles.overviewCard}>
-                {data.water_intake.daily_goal_liters && (
+                {data.water_intake.recommended_liters_per_day && (
                   <View style={styles.waterGoalCard}>
                     <Droplet color="#3DD0D0" size={48} />
-                    <Text style={styles.waterGoalValue}>{data.water_intake.daily_goal_liters}L</Text>
+                    <Text style={styles.waterGoalValue}>{data.water_intake.recommended_liters_per_day}L</Text>
                     <Text style={styles.waterGoalLabel}>Daily Goal</Text>
                   </View>
                 )}
@@ -1880,6 +1846,247 @@ export default function HomeScreen() {
               ))
             ) : (
               <Text style={styles.emptyText}>No rules or warnings defined</Text>
+            )}
+          </View>
+        );
+
+      case "warmup":
+        return (
+          <View style={styles.sectionContent}>
+            <Text style={styles.sectionHeader}>Warmup Protocols</Text>
+            {data.warmup && data.warmup.length > 0 ? (
+              data.warmup.map((warmup: any, idx: number) => (
+                <View key={idx} style={styles.summaryCard}>
+                  <Text style={styles.summaryCardTitle}>{warmup.name || `Warmup ${idx + 1}`}</Text>
+                  {warmup.type && (
+                    <Text style={styles.summaryCardMeta}>Type: {warmup.type}</Text>
+                  )}
+                  {warmup.selection_rule && (
+                    <Text style={styles.summaryCardMeta}>📝 {warmup.selection_rule}</Text>
+                  )}
+
+                  {warmup.exercises && warmup.exercises.length > 0 && warmup.exercises.map((ex: any, exIdx: number) => (
+                    <View key={exIdx} style={{ marginTop: 8, paddingLeft: 12, borderLeftWidth: 2, borderLeftColor: '#3DD0D0' }}>
+                      <Text style={styles.listItem}>• {ex.name}</Text>
+                      {ex.category && (
+                        <Text style={styles.summaryCardMeta}>Category: {ex.category}</Text>
+                      )}
+                      {(ex.sets || ex.reps || ex.duration_seconds) && (
+                        <Text style={styles.summaryCardMeta}>
+                          {ex.sets ? `${ex.sets} sets` : ''}
+                          {ex.reps ? ` × ${ex.reps}` : ''}
+                          {ex.duration_seconds ? ` • ${ex.duration_seconds}s` : ''}
+                        </Text>
+                      )}
+                      {ex.notes && (
+                        <Text style={styles.summaryCardNotes}>{ex.notes}</Text>
+                      )}
+                    </View>
+                  ))}
+
+                  {warmup.notes && (
+                    <Text style={styles.summaryCardNotes}>{warmup.notes}</Text>
+                  )}
+                </View>
+              ))
+            ) : (
+              <Text style={styles.emptyText}>No warmup protocols defined</Text>
+            )}
+          </View>
+        );
+
+      case "schedule":
+        return (
+          <View style={styles.sectionContent}>
+            <Text style={styles.sectionHeader}>Weekly Schedule</Text>
+            {data.weekly_schedule && data.weekly_schedule.length > 0 ? (
+              <View style={styles.summaryCard}>
+                {data.weekly_schedule.map((day: any, idx: number) => (
+                  <View key={idx} style={{
+                    marginBottom: 12,
+                    paddingBottom: 12,
+                    borderBottomWidth: idx < data.weekly_schedule.length - 1 ? 1 : 0,
+                    borderBottomColor: '#334155'
+                  }}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={styles.summaryCardTitle}>
+                        Day {day.day_number}{day.day_label ? ` • ${day.day_label}` : ''}
+                      </Text>
+                      {day.is_rest_day && (
+                        <Text style={{ color: '#F59E0B', fontSize: 12, fontWeight: '600' }}>REST</Text>
+                      )}
+                    </View>
+                    {day.workout_name && !day.is_rest_day && (
+                      <Text style={styles.summaryCardMeta}>Workout: {day.workout_name}</Text>
+                    )}
+                    {day.notes && (
+                      <Text style={styles.summaryCardNotes}>{day.notes}</Text>
+                    )}
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.emptyText}>No weekly schedule defined</Text>
+            )}
+          </View>
+        );
+
+      case "assessment":
+        const assessment = data.assessment || {};
+        const hasAssessmentData = (
+          assessment.demographic || assessment.health_status || assessment.fitness_status ||
+          assessment.psychology || assessment.lifestyle
+        );
+
+        return (
+          <View style={styles.sectionContent}>
+            <Text style={styles.sectionHeader}>Assessment & Background</Text>
+            {hasAssessmentData ? (
+              <>
+                {assessment.demographic && (
+                  <View style={styles.summaryCard}>
+                    <Text style={styles.summaryCardTitle}>Demographic</Text>
+                    {assessment.demographic.age && (
+                      <Text style={styles.listItem}>• Age: {assessment.demographic.age}</Text>
+                    )}
+                    {assessment.demographic.gender && (
+                      <Text style={styles.listItem}>• Gender: {assessment.demographic.gender}</Text>
+                    )}
+                    {assessment.demographic.location && (
+                      <Text style={styles.listItem}>• Location: {assessment.demographic.location}</Text>
+                    )}
+                    {assessment.demographic.lifestyle_summary && (
+                      <Text style={styles.summaryCardNotes}>{assessment.demographic.lifestyle_summary}</Text>
+                    )}
+                  </View>
+                )}
+
+                {assessment.health_status && (
+                  <View style={styles.summaryCard}>
+                    <Text style={styles.summaryCardTitle}>Health Status</Text>
+                    {assessment.health_status.medical_history && assessment.health_status.medical_history.length > 0 && (
+                      <Text style={styles.summaryCardNotes}>Medical: {assessment.health_status.medical_history.join(", ")}</Text>
+                    )}
+                    {assessment.health_status.chronic_conditions && assessment.health_status.chronic_conditions.length > 0 && (
+                      <Text style={styles.summaryCardNotes}>Conditions: {assessment.health_status.chronic_conditions.join(", ")}</Text>
+                    )}
+                    {assessment.health_status.pain_points && assessment.health_status.pain_points.length > 0 && (
+                      <Text style={styles.summaryCardNotes}>Pain Points: {assessment.health_status.pain_points.join(", ")}</Text>
+                    )}
+                  </View>
+                )}
+
+                {assessment.fitness_status && (
+                  <View style={styles.summaryCard}>
+                    <Text style={styles.summaryCardTitle}>Fitness Status</Text>
+                    {assessment.fitness_status.current_level && (
+                      <Text style={styles.listItem}>• Level: {assessment.fitness_status.current_level}</Text>
+                    )}
+                    {assessment.fitness_status.training_history && (
+                      <Text style={styles.summaryCardNotes}>{assessment.fitness_status.training_history}</Text>
+                    )}
+                  </View>
+                )}
+
+                {/* Monitoring, Behavior, Adaptation, Communication sections */}
+                {data.monitoring_and_tracking && (
+                  <View style={styles.summaryCard}>
+                    <Text style={styles.summaryCardTitle}>Monitoring & Tracking</Text>
+                    {data.monitoring_and_tracking.performance_metrics && (
+                      <Text style={styles.summaryCardNotes}>{data.monitoring_and_tracking.performance_metrics}</Text>
+                    )}
+                  </View>
+                )}
+
+                {data.behavior_and_psychology && (
+                  <View style={styles.summaryCard}>
+                    <Text style={styles.summaryCardTitle}>Behavior & Psychology</Text>
+                    {data.behavior_and_psychology.motivation_strategies && (
+                      <Text style={styles.summaryCardNotes}>{data.behavior_and_psychology.motivation_strategies}</Text>
+                    )}
+                  </View>
+                )}
+              </>
+            ) : (
+              <Text style={styles.emptyText}>No assessment data available</Text>
+            )}
+          </View>
+        );
+
+      case "education":
+        return (
+          <View style={styles.sectionContent}>
+            <Text style={styles.sectionHeader}>Education & Guidelines</Text>
+            {data.education_sections && data.education_sections.length > 0 ? (
+              data.education_sections.map((section: any, idx: number) => (
+                <View key={idx} style={styles.summaryCard}>
+                  <Text style={styles.summaryCardTitle}>{section.title}</Text>
+                  {section.category && (
+                    <Text style={styles.summaryCardMeta}>Category: {section.category}</Text>
+                  )}
+                  {section.content && (
+                    <Text style={styles.summaryCardNotes}>{section.content}</Text>
+                  )}
+                  {section.bullet_points && section.bullet_points.length > 0 && (
+                    <View style={{ marginTop: 8 }}>
+                      {section.bullet_points.map((bullet: string, bulletIdx: number) => (
+                        <Text key={bulletIdx} style={styles.listItem}>• {bullet}</Text>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              ))
+            ) : (
+              <Text style={styles.emptyText}>No education content available</Text>
+            )}
+
+            {/* Other sections */}
+            {data.other_sections && data.other_sections.length > 0 && (
+              <View style={{ marginTop: 24 }}>
+                <Text style={styles.sectionHeader}>Other Information</Text>
+                {data.other_sections.map((section: any, idx: number) => (
+                  <View key={idx} style={styles.summaryCard}>
+                    <Text style={styles.summaryCardTitle}>{section.title}</Text>
+                    <Text style={styles.summaryCardNotes}>{section.content}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        );
+
+      case "debug":
+        const debugData = data.debug;
+        return (
+          <View style={styles.sectionContent}>
+            <Text style={styles.sectionHeader}>Debug / Developer View</Text>
+            {debugData && debugData.page_summaries && debugData.page_summaries.length > 0 ? (
+              debugData.page_summaries.map((page: any, idx: number) => (
+                <View key={idx} style={styles.summaryCard}>
+                  <Text style={styles.summaryCardTitle}>Page {page.page}</Text>
+                  <Text style={styles.summaryCardNotes}>{page.summary}</Text>
+
+                  {page.mapped_to && page.mapped_to.length > 0 && (
+                    <View style={{ marginTop: 8 }}>
+                      <Text style={styles.summaryCardMeta}>Mapped to:</Text>
+                      {page.mapped_to.map((path: string, pathIdx: number) => (
+                        <Text key={pathIdx} style={styles.listItem}>• {path}</Text>
+                      ))}
+                    </View>
+                  )}
+
+                  {page.unmapped_raw_text && (
+                    <View style={{ marginTop: 8 }}>
+                      <Text style={styles.summaryCardMeta}>Unmapped content:</Text>
+                      <Text style={[styles.summaryCardNotes, { fontSize: 10, fontFamily: 'monospace' }]} numberOfLines={5}>
+                        {page.unmapped_raw_text}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              ))
+            ) : (
+              <Text style={styles.emptyText}>No debug data available</Text>
             )}
           </View>
         );
@@ -2606,6 +2813,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#94A3B8",
     textAlign: "center",
+  },
+  versionBox: {
+    backgroundColor: "rgba(74, 222, 128, 0.1)",
+    borderRadius: 12,
+    padding: 16,
+    marginVertical: 20,
+    borderWidth: 1,
+    borderColor: "rgba(74, 222, 128, 0.3)",
+  },
+  versionTitle: {
+    fontSize: 14,
+    fontWeight: "700" as const,
+    color: "#4ADE80",
+  },
+  versionText: {
+    fontSize: 12,
+    color: "#86EFAC",
+    lineHeight: 18,
+    marginBottom: 2,
   },
   uploadSection: {
     marginBottom: 24,
