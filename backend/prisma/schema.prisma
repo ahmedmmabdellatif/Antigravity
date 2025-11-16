@@ -1,0 +1,60 @@
+// Prisma schema for Fitness PDF Parser Backend v2
+// Supports SQLite for local dev, can be switched to PostgreSQL for production
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model ParsedPlan {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Source file metadata
+  sourceFilename String
+  pagesCount     Int
+  status         String // "processing", "completed", "failed"
+
+  // Quick-access metadata from the parsed plan
+  metaTitle         String?
+  metaCoachName     String?
+  metaDurationWeeks Int?
+
+  // Full JSON storage
+  rawJson   String // JSON stringified full fitness plan
+  debugJson String // JSON stringified debug data with page summaries
+
+  // Relations
+  mediaAssets MediaAsset[]
+
+  @@index([createdAt])
+  @@index([status])
+}
+
+model MediaAsset {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  // Foreign key to ParsedPlan
+  planId String
+  plan   ParsedPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  // Media metadata
+  pageNumber   Int?
+  type         String // "video", "image", "gif"
+  originalUrl  String
+  resolvedUrl  String? // Fetched/processed URL
+  thumbnailUrl String?
+
+  // Context from the plan
+  exerciseName String?
+  notes        String?
+
+  @@index([planId])
+  @@index([type])
+}
