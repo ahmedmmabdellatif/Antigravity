@@ -43,7 +43,7 @@ import {
 } from "../constants/fitnessTypes";
 
 const STORAGE_KEY_PREFIX = "pdf_parser:document:";
-const WORKER_URL = "https://pdf-relay.ahmed-m-m-abdellatif.workers.dev/";
+const BACKEND_API_URL = process.env.EXPO_PUBLIC_BACKEND_API_URL ?? "http://localhost:4000";
 
 type ParsedResult = {
   data: UniversalEnvelope;
@@ -312,7 +312,7 @@ export default function HomeScreen() {
     }
   };
 
-  const sendToWorker = async () => {
+  const sendToBackend = async () => {
     if (!selectedFile) {
       setError("Please select a PDF file first");
       return;
@@ -322,7 +322,7 @@ export default function HomeScreen() {
     setError("");
 
     try {
-      console.log("Uploading file to Worker relay:", selectedFile.name);
+      console.log("Uploading file to backend:", selectedFile.name);
 
       const formData = new FormData();
       const fileToUpload = {
@@ -332,7 +332,7 @@ export default function HomeScreen() {
       } as any;
       formData.append("file", fileToUpload);
 
-      const response = await fetch(WORKER_URL, {
+      const response = await fetch(`${BACKEND_API_URL}/api/parse`, {
         method: "POST",
         body: formData,
       });
@@ -343,13 +343,13 @@ export default function HomeScreen() {
         try {
           errorJson = JSON.parse(errorText);
         } catch {
-          throw new Error(`Worker error: ${response.status} - ${errorText}`);
+          throw new Error(`Backend error: ${response.status} - ${errorText}`);
         }
-        throw new Error(errorJson.error || `Worker error: ${response.status}`);
+        throw new Error(errorJson.message || errorJson.error || `Backend error: ${response.status}`);
       }
 
       const jsonData = await response.json();
-      console.log("Received parsed JSON from worker");
+      console.log("Received parsed JSON from backend");
 
       const result: ParsedResult = {
         data: jsonData,
@@ -388,7 +388,7 @@ export default function HomeScreen() {
         setCurrentScreen("domains");
       }
     } catch (err) {
-      console.error("Error sending to Worker:", err);
+      console.error("Error sending to backend:", err);
       const errorMessage = err instanceof Error ? err.message : "Unknown error occurred";
       setError(errorMessage);
       
@@ -719,7 +719,7 @@ export default function HomeScreen() {
                 styles.sendButton,
                 (!selectedFile || isLoading) && styles.sendButtonDisabled,
               ]}
-              onPress={sendToWorker}
+              onPress={sendToBackend}
               disabled={!selectedFile || isLoading}
               activeOpacity={0.8}
             >

@@ -72,17 +72,8 @@ export class ParseController {
 
         console.log(`[Parse Controller] Successfully completed parse for plan ${planId}`);
 
-        res.status(200).json({
-          planId: updatedPlan.id,
-          status: updatedPlan.status,
-          meta: {
-            title: metaTitle,
-            coachName: metaCoachName,
-            durationWeeks: metaDurationWeeks,
-          },
-          pagesCount: updatedPlan.pagesCount,
-          createdAt: updatedPlan.createdAt,
-        });
+        // Return the full merged UniversalEnvelope for the app to consume
+        res.status(200).json(mergedResult);
       } catch (processingError) {
         // Mark as failed
         db.prepare(`
